@@ -2,7 +2,9 @@ try:
     import simplejson as json
 except ImportError:
     import json
-from datetime import date, datetime
+import decimal
+from bson import ObjectId
+from datetime import date, datetime, time
 from decimal import Decimal
 
 from .exceptions import SerializationError, ImproperlyConfigured
@@ -20,15 +22,40 @@ class TextSerializer(object):
 
         raise SerializationError('Cannot serialize %r into text.' % data)
 
+def is_aware(value):
+    """
+    Determines if a given datetime.datetime is aware.
+    The logic is described in Python's docs:
+    http://docs.python.org/library/datetime.html#datetime.tzinfo
+    """
+    return value.tzinfo is not None and value.tzinfo.utcoffset(value) is not None
+
 class JSONSerializer(object):
     mimetype = 'application/json'
 
-    def default(self, data):
-        if isinstance(data, (date, datetime)):
-            return data.isoformat()
-        elif isinstance(data, Decimal):
-            return float(data)
-        raise TypeError("Unable to serialize %r (type: %s)" % (data, type(data)))
+    def default(self, o):
+        # See "Date Time String Format" in the ECMA-262 specification.
+        if isinstance(o, datetime):
+            r = o.isoformat()
+            if o.microsecond:
+                r = r[:23] + r[26:]
+            if r.endswith('+00:00'):
+                r = r[:-6] + 'Z'
+            return r
+        elif isinstance(o, date):
+            return o.isoformat()
+        elif isinstance(o, time):
+            if is_aware(o):
+                raise ValueError("JSON can't represent timezone-aware times.")
+            r = o.isoformat()
+            if o.microsecond:
+                r = r[:12]
+            return r
+        elif isinstance(o, decimal.Decimal):
+            return str(o)
+        elif isinstance(o, ObjectId):
+            return str(o)
+        raise TypeError("Unable to serialize %r (type: %s)" % (o, type(o)))
 
     def loads(self, s):
         try:
