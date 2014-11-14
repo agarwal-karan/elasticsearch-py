@@ -26,6 +26,10 @@ def expand_action(data):
         if key in data:
             action[op_type][key] = data.pop(key)
 
+    #set string as default type if not passed
+    if "_type" not in action[op_type]:
+        action[op_type]["_type"] = "string"
+
     # no data payload for delete
     if op_type == 'delete':
         return action, None
